@@ -31,3 +31,7 @@ Gaudet-Lander/AAS-18-290_6DOF_journal/
 Genetic_Programming/GP_Variants/EuroGP2020/.idea/
 /GP/.idea/
 /GP/GPBased_ControlSchemes/.idea/
+
+/EQLM/EQLM/saved_model/
+/EQLM/eqlm_runs_*
+/EQLM/qnet_runs_*
