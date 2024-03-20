@@ -20,6 +20,28 @@ Bibtex entry:
 }
 ```
 
+## Environment
+```
+Platform: Window with GPU
+```
+
+### Install the reqiuremnt.txt
+```
+For Windows:
+conda install -c conda-forge cudatoolkit=11.2 cudnn=8.1.0 --yes
+# Anything above 2.10 is not supported on the GPU on Windows Native
+python -m pip install "tensorflow<2.11" # with CPU and GPU
+# Verify the installation:
+python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+
+
+
+conda install --yes matplotlib multiprocess pandas scipy sympy tqdm XlsxWriter pygraphviz jupyter chardet
+pip install scikit_learn==1.2.2 bootstrapped
+
+conda install -c conda-forge deap gym
+```
+
 ## References
 1. Watkins CJ, Dayan P. Q-learning. Machine learning. 1992 May 1;8(3-4):279-92.
 2. Huang GB, Zhu QY, Siew CK. Extreme learning machine: theory and applications. Neurocomputing. 2006 Dec 1;70(1-3):489-501.

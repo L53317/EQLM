@@ -53,7 +53,8 @@ class Environment(gym.Wrapper):
 	
 	def reset(self):
 		"""Additionally flatten and reshape the state output"""
-		s = super().reset()
+		# s = super().reset()
+		s, _ = super().reset() # New gym version(0.18.0->0.26.1), with GPU very slow
 		return gym.spaces.flatten(self.observation_space,s).reshape(1,-1)
 	
 	def step(self,a,render=False,**kwargs):
@@ -68,7 +69,8 @@ class Environment(gym.Wrapper):
 		**kwargs
 			Additional keyword arguments passed to `render`
 		"""
-		s,r,d,info = super().step(a)
+		# s,r,d,info = super().step(a)
+		s,r,d,info,_ = super().step(a) #New gym version
 		if render:
 			super().render(**kwargs)
 		return gym.spaces.flatten(self.observation_space,s).reshape(1,-1),r,d,info
