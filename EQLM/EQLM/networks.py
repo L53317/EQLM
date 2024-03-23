@@ -12,7 +12,7 @@ try:
 except ImportError:
 	import tensorflow as tf
 
-	
+
 class SingleLayerNetwork(object):
 	"""
 	A Q-Network with a single hidden layer
@@ -75,7 +75,7 @@ class SingleLayerNetwork(object):
 		self.act = act_fn(tf.add(tf.matmul(self.s_input,self.w_in),self.b_in))
 		self.Q_est = tf.matmul(self.act,self.W)
 		self.prep_state = None
-		
+
 		self.params = {'W':self.W, 'w':self.w_in, 'b':self.b_in}
 		self.new_params = {'W':tf.placeholder(shape=[None,None],dtype=tf.float32),
 						  'w':tf.placeholder(shape=[None,None],dtype=tf.float32),
@@ -85,35 +85,35 @@ class SingleLayerNetwork(object):
 						self.b_in.assign(self.new_params['b'])]
 
 		self.updateModel = tf.no_op()
-		
+
 	def var_init(self):
 		"""Initial graph variables"""
 		self.sess.run(tf.global_variables_initializer())
-		
+
 	def assign_params(self,p_new):
 		"""Assign new values to updatable parameters"""
 		p_assign_dict = {self.new_params['W']:p_new['W'],
 						self.new_params['w']:p_new['w'],
 						self.new_params['b']:p_new['b']}
 		self.sess.run(self.p_assign, feed_dict=p_assign_dict)
-		
+
 	def get_params(self):
 		"""Return current values of updatable parameters"""
 		return self.sess.run(self.params)
-		
+
 	def Q_predict(self, s=None, s_prep=None):
 		"""
 		Return predicted action-values for the state
-		
+
 		...
-		
+
 		Parameters
 		----------
 		s : array-like, optional
 			State in its `normal` form
 		s_prep : array_like, optional
 			State in a preprocessed form defined by `prep_state`
-			
+
 		Returns
 		-------
 		array-like
@@ -129,18 +129,17 @@ class SingleLayerNetwork(object):
 	def update(self, *args):
 		"""Method for updating network parameters"""
 		self.sess.run(self.updateModel)
-		
+
 	def close(self):
 		"""Close the tensorflow session"""
 		self.sess.close()
-		
 
 class QNet(SingleLayerNetwork):
 	"""
 	A Q-Network which uses gradient based updates
-	
+
 	...
-	
+
 	Attributes
 	----------
 	k : int
@@ -150,7 +149,7 @@ class QNet(SingleLayerNetwork):
 	updateModel : tf.Operation
 		Runs RMSPropOptimizer to minimize mean squared error
 	"""
-	def __init__(self, state_size, action_size, 
+	def __init__(self, state_size, action_size,
 				 alpha=0.01, clip_norm=None, minibatch_size=5, **kwargs):
 		"""
 		Parameters
@@ -167,32 +166,31 @@ class QNet(SingleLayerNetwork):
 			Additional keyword arguments passed to `SingleLayerNetwork`
 		"""
 		super().__init__(state_size, action_size, **kwargs)
-		
+
 		self.k = int(minibatch_size)
 		self.nextQ = tf.placeholder(shape=[None,action_size],dtype=tf.float32)
 		loss = tf.reduce_sum(tf.square(self.nextQ - self.Q_est))
 		trainer = tf.train.RMSPropOptimizer(alpha)
-		
+
 		if clip_norm is not None:
 			grads = trainer.compute_gradients(loss,[self.W,self.w_in,self.b_in])
 			cap_grads = [(tf.clip_by_norm(grad, clip_norm), var) for grad, var in grads]
 			self.updateModel = trainer.apply_gradients(cap_grads)
 		else:
 			self.updateModel = trainer.minimize(loss,var_list=[self.W,self.w_in,self.b_in])
-			
+
 		self.var_init()
-		
+
 	def update(self, S, Q):
 		"""Updates based on states and target action values"""
 		self.sess.run(self.updateModel,{self.s_input:S,self.nextQ:Q})
-		
-		
+
 class ELMNet(SingleLayerNetwork):
 	"""
 	A Q-Network which uses ELM inspired updates
-	
+
 	...
-	
+
 	Attributes
 	----------
 	k : int
@@ -208,8 +206,8 @@ class ELMNet(SingleLayerNetwork):
 	first : bool
 		Used to indicate the first update to initialise weights
 	"""
-	def __init__(self, state_size, action_size, 
-				 gamma_reg=0.001, minibatch_size=5, **kwargs):
+	def __init__(self, state_size, action_size,
+				 gamma_reg=0.001, minibatch_size=5, regularization=None, **kwargs):
 		"""
 		Parameters
 		----------
@@ -223,6 +221,8 @@ class ELMNet(SingleLayerNetwork):
 			Additional keyword arguments passed to `SingleLayerNetwork`
 		"""
 		super().__init__(state_size, action_size, **kwargs)
+		self.regularization = regularization
+		# print(3, self.regularization)
 
 		self.k = int(minibatch_size)
 		self.prep_state = self.act
@@ -233,6 +233,30 @@ class ELMNet(SingleLayerNetwork):
 
 		A0 = tf.add(tf.scalar_mul(1.0/gamma_reg,tf.eye(self.N_hid)),tf.matmul(H_t,self.H))
 		A0_inv = tf.matrix_inverse(A0)
+
+		# # High-order regularization, not oringinal
+		if self.regularization == 'HR':
+			H_dim = self.H.shape
+			H_tH = tf.matmul(H_t , self.H)
+			vas, ves = tf.linalg.eigh(H_tH) # non-decreasing order
+			Rnn = tf.zeros_like(tf.matmul(H_t , self.H))
+			for i in range(H_dim[1]-1, H_dim[1], 1) :
+				miu= abs(vas[0]**2 + vas[0]* vas[H_dim[1]-1])**0.5
+				lamn_1 = vas[H_dim[1]-2]
+				miu = tf.reduce_min([miu, lamn_1]) # hr, k=1, opt
+				# miu = tf.reduce_max(vas) # largest lamda for smallest
+				Rnn = tf.tensor_scatter_nd_update(Rnn, indices=[[i, i]], updates=[miu]) # hr, parameter
+			# # Rnn = tf.scalar_mul((tf.scalar_mul(vas[0],vas[H_dim[1]-1]))**0.5, tf.eye(int(H_dim[1])))
+			Rnn = tf.scalar_mul(tf.reduce_max(vas), tf.eye(int(H_dim[1]))) # largest lamda I
+			# k = 1
+			# w = 0.0
+			# correct_bias_w = True
+			# H_inv_a = hrm(H, Rnn, k, w, correct_bias_w) @ H_t # error
+			# # H_inv_a = tf.matrix_inverse(tf.add(H_tH, self.Rnn)) # sometimes not invertable, add a very small regularization parameters here.
+			H_inv_a = tf.matrix_inverse(tf.add(tf.scalar_mul(1.0/gamma_reg,tf.eye(self.N_hid)), tf.add(H_tH, Rnn)))
+			A0_inv = tf.matmul(H_inv_a, tf.add(tf.eye(int(H_dim[1])), tf.matmul(Rnn , H_inv_a))) # HR, k=1
+			# A0_inv = tf.matmul(A0_inv, tf.matmul(tf.scalar_mul(1.0/gamma_reg,tf.eye(self.N_hid)), A0_inv)) # Using orignal but HR
+
 		W0 = tf.matmul(A0_inv,tf.matmul(H_t,self.T))
 		self.initModel = (self.W.assign(W0), A_inv.assign(A0_inv))
 
@@ -243,10 +267,10 @@ class ELMNet(SingleLayerNetwork):
 			tf.matmul(tf.matmul(K_t,A_inv),tf.matmul(H_t,self.T)))
 		A_new = tf.matmul(K_t,A_inv)
 		self.updateModel = (self.W.assign(W_new), A_inv.assign(A_new))
-		
+
 		self.first = True
 		self.var_init()
-		
+
 	def update(self, H, T):
 		"""Updates based on preprocessed states and target action values"""
 		if self.first:

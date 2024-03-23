@@ -71,7 +71,7 @@ class QAgent(object):
 	update(state,reward,done)
 		Updates the agent's policy and network based on observed info
 	"""
-	def __init__(self,env,net_type='ELMNet',f_heur=None,n_heur=0,
+	def __init__(self,env, net_type='ELMNet', regularization=None, f_heur=None,n_heur=0,
 				 gamma=0.6,eps_i=0.9,eps_f=0.0,n_eps=400,target_steps=50,**kwargs):
 		"""
 		Parameters
@@ -96,7 +96,9 @@ class QAgent(object):
 			Number of steps between target network updates
 		**kwargs
 			Additional keyword arguments passed to the nn module and `ReplayMemory`
-			
+		regularization : {None, 'HR'}, optinal
+			Specifies which method of regularization to use
+
 		Raises
 		------
 		ValueError
@@ -104,15 +106,23 @@ class QAgent(object):
 		"""
 		self.state_size = env.state_size
 		self.action_size = env.action_size
+		self.regularization = regularization
+		# print(1,self.regularization) # from params_EQLM.regularization
+
 		try:
 			net_module = getattr(networks,net_type)
 		except AttributeError:
 			raise ValueError('Invalid network type: \'{}\''.format(net_type))
 
-		self.nn = net_module(self.state_size, self.action_size, **kwargs)
-		self.nn_target = net_module(self.state_size, self.action_size, is_target=True, **kwargs)
+		if net_type == 'ELMNet' and self.regularization != None:
+			self.nn = net_module(self.state_size, self.action_size, regularization=self.regularization, **kwargs)
+			self.nn_target = net_module(self.state_size, self.action_size, regularization=self.regularization, is_target=True, **kwargs)
+		else:
+			self.nn = net_module(self.state_size, self.action_size, **kwargs)
+			self.nn_target = net_module(self.state_size, self.action_size, is_target=True, **kwargs)
+
 		self.nn_target.assign_params(self.nn.get_params())
-		
+
 		self.gamma = gamma
 		self.epsilon = eps_i
 		self.d_eps = (eps_i-eps_f)/float(n_eps)
@@ -120,21 +130,21 @@ class QAgent(object):
 		self.f_heur = f_heur
 		self.n_heur = n_heur
 		self.target_steps = target_steps
-		
+
 		self.memory = ReplayMemory(**kwargs)
 		self.prev_s = []
 		self.prev_a = []
 		self.ep_count = 0
 		self.step_count = 0
-	
+
 	def action_select(self,state):
 		"""Returns an action based on the state using an epsilon-greedy policy
-		
+
 		Parameters
 		----------
 		state : array-like
 			The environment state at the current timestep
-		
+
 		Returns
 		-------
 		action : int
@@ -150,10 +160,10 @@ class QAgent(object):
 		self.prev_s=state
 		self.prev_a=action
 		return action
-	
+
 	def update(self,state,reward,done):
 		"""Updates the agent's policy and Q network based on observed info
-		
+
 		Parameters
 		----------
 		state : list
@@ -173,10 +183,10 @@ class QAgent(object):
 			self.memory.add([s_prep[0],self.prev_a,reward,s_prep[1],done])
 		else:
 			self.memory.add([self.prev_s.reshape(-1),self.prev_a,reward,state.reshape(-1),done])
-			
+
 		if len(self.memory)<self.nn.k:
 			return
-		
+
 		D_update = self.memory.sample(self.nn.k)
 		s, a, r, Sd, St = (np.stack([d[0] for d in D_update]),
 						   np.array([d[1] for d in D_update]),
@@ -193,7 +203,7 @@ class QAgent(object):
 		Q[range(Q.shape[0]),a] = r
 		Q[indt,a[indt]] += self.gamma*np.max(Qd,1)
 		self.nn.update(s,Q)
-		
+
 		self.step_count += 1
 		if self.step_count >= self.target_steps:
 			self.nn_target.assign_params(self.nn.get_params())
